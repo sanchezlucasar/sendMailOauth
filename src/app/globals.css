@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    background-color: rgb(226 232 240);
+}
+
+/* Estilos para el footer */
+.footer {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    background-color: #333;
+    color: white;
+    text-align: center;
+    margin: 0 0 0;
+    padding: 20px 0;
+}
+
+/* Estilos para el contenido principal */
+.main-content {
+    margin-bottom: 50px;
+    /* Espaciado para el footer */
+    min-height: calc(100vh - 100px);
+    /* Altura mínima menos el footer */
+}
+
+.table-container {
+    max-height: calc(100vh - 150px);
+    /* Altura máxima menos el header y el footer */
+    overflow-y: auto;
+}
