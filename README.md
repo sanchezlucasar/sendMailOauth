@@ -21,8 +21,7 @@ APP MAILING
 1 - Clonar app desde github. 
 ```bash
 # Clonar este repositorio
-$ git clone https://github.com/c33dryk/app_mailing.git
-```
+$ git clone
 
 
 <div id='variables'>
