@@ -1,14 +1,9 @@
 export interface IEmail {
-    nombre_cliente: string
-    from: string;
+    id: number;
     to: string;
     cc: string;
     subject: string;
     text: string;
-    apiKey: string;
-    clientId: string;
-    clientSecret: string;
-    refreshToken: string;
 }
 
 export interface Client {
@@ -26,8 +21,21 @@ export interface Credentials {
 }
 
 export interface User {
-    id: string;
+    id: number;
     username: string;
     email: string;
     password: string;
+}
+
+export interface Log {
+
+    id: number;
+    texto: string;
+    createdAt: Date;
+}
+
+export interface ToastProps {
+    message: string;
+    type: 'error' | 'success';
+    onClose: () => void;
 }
