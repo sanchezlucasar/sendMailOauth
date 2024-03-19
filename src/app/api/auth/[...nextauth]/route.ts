@@ -3,8 +3,6 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import db from '@/libs/db';
 import bcrypt from 'bcrypt';
 
-
-// Opciones de autenticación
 const authOptions = {
     providers: [
         CredentialsProvider({
@@ -14,27 +12,36 @@ const authOptions = {
                 password: { label: "Password", type: "password", placeholder: "*****" },
             },
             async authorize(credentials: { email: string; password: string } | undefined, req: any) {
-                if (!credentials || !credentials.email || !credentials.password) {
-                    throw new Error('Invalid credentials');
-                }
+                try {
 
-                const userFound = await db.user.findUnique({
-                    where: {
-                        email: credentials.email
+                    if (!credentials || !credentials.email || !credentials.password) return null
+
+                    const userFound = await db.user.findUnique({
+                        where: {
+                            email: credentials.email
+                        }
+                    })
+
+
+                    if (!userFound) return null;
+
+                    const matchPassword = await bcrypt.compare(credentials.password, userFound.password);
+
+                    if (!matchPassword) return null;
+
+                    return {
+
+                        id: String(userFound.id),
+                        name: userFound.username,
+                        email: userFound.email,
                     }
-                })
 
-                if (!userFound) throw new Error('No user found')
-
-                const matchPassword = await bcrypt.compare(credentials.password, userFound.password);
-
-                if (!matchPassword) throw new Error('Wrong password')
-
-                return {
-                    id: String(userFound.id),
-                    name: userFound.username,
-                    email: userFound.email,
+                } catch (error) {
+                    console.error("Error durante la autenticación:", error);
+                    return null;
                 }
+
+
             },
         }),
     ],
