@@ -1,3 +1,17 @@
+# Aplicación para la prueba de utilización de node-cron en la automatización de procesos.
+
+Se creó una aplicación para enviar correos mediante Nodemailer, Utilizando la configuración Oauth2 de Google. Se crearon Clientes que son los que tienen los datos de correos a enviar. Por ej: Cliente 1, email cliente1@email.com , el correo se le envíaria a el. Se agrega todo el proceso de como gestionar la configuración de Google para configurar el correo de envios.y Se dockerizó la aplicación.
+
+# Las tecnologías utilizadas para esta herramienta son 
+ * Prisma + SQLite  (Base de datos para almacenar funciones y tareas)
+ * NextJs - Con Server Actions -
+ * NextAuth para la autentificación mediante Usuario y Contraseña tradicional
+ * React Query
+ * DaisyUi
+ * Tailwind
+ * Typescript
+ * Docker 
+
 <h1 align="center">
 APP MAILING
 </h1>
