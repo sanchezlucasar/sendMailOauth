@@ -1,188 +1,92 @@
 'use client'
 
-import { useForm } from "react-hook-form"
-import { useEffect, useMemo, useState } from 'react';
-import { NextPage } from 'next';
-import { TrashIcon, PencilIcon } from '@heroicons/react/outline';
-import Navbar from "@/components/Navbar";
-import { Client } from "@/types";
-import '@/app/globals.css'
-const ClientPage: NextPage = () => {
+import { useState, useMemo, FormEvent } from 'react';
+import { Client } from '@/types';
+import { useDebounce } from '@/Hooks/useDebounce'; import '@/app/globals.css';
+import { PencilIcon, TrashIcon } from '@heroicons/react/outline';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { createClients, deleteClient, fetchClients, updateClient } from './actions';
 
-  const [clients, setClients] = useState([] as any);
-  const { register, handleSubmit } = useForm();
+const ClientPage = () => {
   const [showModal, setShowModal] = useState(false);
-  const [showModalCliente, setShowModalCliente] = useState(false);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [searchValue, setSearchValue] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [searchTerm, setSearchTerm] = useState("");
+
+  const debouncedSearchTerm = useDebounce(searchValue, 400);
   const itemsPerPage = 4;
+  const queryClient = useQueryClient();
 
-  const fetchClientsData = async () => {
-    try {
-
-      const response = await fetch('/api/client');
-      const resJSON = await response.json();
-      const clientsData = resJSON // Llama a la función que obtiene los clientes del servidor
-
-      setClients(clientsData); // Actualiza el estado con los clientes obtenidos
-    } catch (error) {
-      console.error('Error fetching clients:', error);
-    }
-  };
-
-  useEffect(() => {
-    // Carga inicial de clientes si existen
-    fetchClientsData();
-  }, []);
-
-  const handleAddClient = () => {
-    setShowModalCliente(true);
-    setSelectedClient(null);
-  };
-
-
-  const onSubmit = handleSubmit(async (data: any) => {
-    try {
-      const response = await fetch('/api/client', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-
-      const resJSON = await response.json();
-
-      if (response.ok) {
-        setShowModalCliente(false);
-        setClients([...clients, resJSON]);
-      } else {
-        if ('message' in resJSON) {
-          alert(resJSON.message);
-        }
-        throw new Error('Error al crear el cliente');
-      }
-
-    } catch (error) {
-      console.error('Error:', error);
-    }
+  const { data: clients, error, isLoading, isError } = useQuery({
+    queryKey: ['clients', debouncedSearchTerm],
+    queryFn: () => fetchClients(debouncedSearchTerm)
   });
 
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    field: keyof Client
-  ) => {
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const formValues: { [key: string]: any } = {};
+    //@ts-ignore
+    for (let [key, value] of formData.entries()) {
+      formValues[key] = value;
+    }
+    const response = createClients(formValues);
+    if ('error' in response) {
+      const error = response.error;
+      toast.error(`Error al crear el cliente: ${error}`
+      );
+    } else {
+      toast.success('Cliente creado exitosamente');
+      setShowModal(false)
+      queryClient.invalidateQueries();
+    }
+  }
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>, field: keyof Client) => {
     if (selectedClient) {
       setSelectedClient({
         ...selectedClient,
-        [field]: e.target.value,
+        [field]: event.target.value
       });
     }
   };
 
-  const handleModify = (client: Client) => {
-    setSelectedClient(client);
-    setShowModal(true);
-  };
-
-  const handleCloseModal = () => {
-    setSelectedClient(null);
-    setShowModalCliente(false);
-  };
-
-  const handleSaveChanges = async () => {
-    try {
-      if (selectedClient && clients.length > 0 && clients) {
-        const response = await fetch('/api/client', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(selectedClient),
-        });
-
-        const updatedClient = await response.json(); // Almacenar el resultado de la respuesta una vez
-        console.log(updatedClient);
-
-        if (response.ok) {
-          // Actualiza el estado con el cliente actualizado
-          const updatedClients = clients.map((existingClient: Client) =>
-            existingClient.id === updatedClient.id ? updatedClient : existingClient
-          );
-
-          setClients(updatedClients);
-          console.log('Cerrando el modal...');
-          setShowModal(false);
-        }
-      }
-    } catch (error) {
-      console.error('Error al actualizar el cliente:', error);
-    }
-  };
-
-  const handleDelete = async (id: number) => {
-    try {
-      if (id) {
-        const response = await fetch(`/api/client/${id}`, {
-          method: 'DELETE',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
-        if (response.ok) {
-          alert('cliente eliminado')
-          setClients([...clients]);
-          fetchClientsData();
-          setShowModal(false);
-        }
-
-      }
-    } catch (error) {
-      console.error('Error al eliminar el cliente:', error);
-    }
-  };
-
-  const getPaginatedClients = (currentPage: number, itemsPerPage: number, clients: Client[]) => {
-    const indexOfLastItem = currentPage * itemsPerPage;
-    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-    return clients.slice(indexOfFirstItem, indexOfLastItem);
+  const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchValue(event.target.value);
   };
 
   const paginatedClients = useMemo(() => {
-    return getPaginatedClients(currentPage, itemsPerPage, clients);
-  }, [clients, currentPage]);
+    if (!clients) return []
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return clients.slice(startIndex, endIndex);
+  }, [clients, currentPage, itemsPerPage]);
 
-  const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(event.target.value);
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
   };
 
-  const filteredClients = useMemo(() => {
-    if (!searchTerm) {
-      return paginatedClients;
-    }
-
-    return paginatedClients.filter((client) =>
-      client.nombre.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [searchTerm, paginatedClients]);
+  if (isLoading) return <div>Loading...</div>;
+  if (isError) {
+    toast.error('¡Se produjo un error al cargar la información!');
+  }
 
   return (
     <div className="h-screen main-content">
-      <Navbar />
-      <div style={{ padding: '0px 15px 0px 5px' }} >
-        <div className="w-4/5 mx-auto ">
-
+      <div style={{ padding: '0px 15px 0px 5px' }}>
+        <div className="w-4/5 mx-auto">
           <h2 className="text-2xl ml-0 font-bold flex justify-between w-3/4">
             <span className=" mt-8">Cliente</span>
           </h2>
-
           <div className=" mt-10 flex justify-between">
             <label className="relative w-1/2">
               <input
                 type="text"
                 placeholder="Buscar por nombre"
-                value={searchTerm}
+                value={searchValue}
                 onChange={handleSearch}
                 className="p-3 pl-10 border rounded w-full"
               />
@@ -200,33 +104,33 @@ const ClientPage: NextPage = () => {
                 />
               </svg>
             </label>
-
             <button
-              onClick={handleAddClient}
+              onClick={() => {
+                setSelectedClient(null);
+                setShowModal(true);
+              }}
               className="btn bg-stone-300 text-slate-800"
             >
               Nuevo Cliente
             </button>
-
           </div>
-
         </div>
         <div className="w-4/5 mx-auto">
-
           <div className="table-container  mt-10">
-            <table className="border-collapse border w-full">    <thead>
-              <tr className="bg-stone-300">
-                <th className="p-3">Nombre</th>
-                <th className="p-3">Email</th>
-                <th className="p-3">ClientId</th>
-                <th className="p-3">ClientSecret</th>
-                <th className="p-3">RefreshToken</th>
-                <th className="p-3">ApiKey</th>
-                <th className="p-3">Acciones</th>
-              </tr>
-            </thead>
-              <tbody >
-                {filteredClients && filteredClients.length > 0 && filteredClients.map((client: Client) => (
+            <table className="border-collapse border w-full">
+              <thead>
+                <tr className="bg-stone-300">
+                  <th className="p-3">Nombre</th>
+                  <th className="p-3">Email</th>
+                  <th className="p-3">ClientId</th>
+                  <th className="p-3">ClientSecret</th>
+                  <th className="p-3">RefreshToken</th>
+                  <th className="p-3">ApiKey</th>
+                  <th className="p-3">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedClients.map((client: Client) => (
                   <tr key={client.id} className="border-b">
                     <td className="p-3">{client.nombre}</td>
                     <td className="p-3 text-center">{client.mail}</td>
@@ -234,18 +138,31 @@ const ClientPage: NextPage = () => {
                     <td className="p-3 password text-center">{client.clientSecret}</td>
                     <td className="p-3 password text-center">{client.refreshToken}</td>
                     <td className="p-3 text-center">{client.apiKey}</td>
-
-                    <td className="p-3 text-center">
+                    <td className="p-3 text-center flex justify-center">
                       <button
-                        onClick={() => handleModify(client)}
+                        onClick={() => {
+                          setSelectedClient(client);
+                          setShowModal(true)
+                        }}
                         className="bg-blue-400 hover:bg-blue-600 text-white font-bold py-2 px-2 rounded focus:outline-none focus:shadow-outline mr-2"
                         title="Modificar"
                       >
                         <PencilIcon className="w-4 h-4" />
                       </button>
+
                       <button
-                        onClick={() => handleDelete(client.id)}
-                        className="bg-red-400 hover:bg-red-600 text-white font-bold py-2 px-2 rounded focus:outline-none focus:shadow-outline"
+                        onClick={() => {
+                          const result = deleteClient(client.id);
+                          if ('error' in result) {
+                            const error = result.error;
+                            toast.error(`Error al eliminar el cliente: ${error}`
+                            );
+                          } else {
+                            toast.success('Cliente eliminado exitosamente');
+                            queryClient.invalidateQueries();
+                          }
+                        }}
+                        className="bg-red-400 hover:bg-blue-600 text-white font-bold py-2 px-2 rounded focus:outline-none focus:shadow-outline mr-2"
                         title="Eliminar"
                       >
                         <TrashIcon className="w-4 h-4" />
@@ -256,151 +173,155 @@ const ClientPage: NextPage = () => {
               </tbody>
             </table>
           </div>
-
-          <div className="join flex justify-end mb-4">
-            {Array.from({ length: Math.ceil(clients.length / itemsPerPage) }).map((_, index) => (
+          <div className="mt-8 flex justify-end">
+            {clients && Array.from({ length: Math.ceil(clients.length / itemsPerPage) }).map((_, index) => (
               <button
                 key={index}
-                className={`join-item btn ${currentPage === index + 1 ? 'btn-active' : ''}`}
-                onClick={() => setCurrentPage(index + 1)}
+                className={`btn ${currentPage === index + 1 ? 'btn-active' : ''}`}
+                onClick={() => handlePageChange(index + 1)}
               >
                 {index + 1}
               </button>
             ))}
           </div>
-          {/* Modal para agregar cliente */}
-          {
-            showModalCliente && (
-              <div className="fixed top-0 left-0 w-full h-full flex justify-center items-center bg-black bg-opacity-50 z-50">
-                <div className="bg-white rounded p-8 w-96">
-                  <button
-                    className="float-right text-gray-600 cursor-pointer"
-                    onClick={handleCloseModal}
-                  >
-                    Cerrar
-                  </button>
-                  <h2 className="text-2xl font-bold mb-4">Agregar cliente</h2>
-                  <form onSubmit={onSubmit}>
-                    {/* Formulario para agregar cliente */}
-                    <div className="mb-4">
-                      <input
-                        type="text"
-                        {...register("nombre", {
-                          required: { value: true, message: "Nombre es requerido" },
-                        })}
-                        className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
-                        placeholder="Nombre"
-                      />
-                      <input
-                        type="text"
-                        {...register("mail", {
-                          required: { value: true, message: "El Email es requerido" },
-                        })}
-                        className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
-                        placeholder="email"
-                      />
-                      <input
-                        type="text"
-                        {...register("clientId", {
-                          required: { value: true, message: "El clientId es requerido" },
-                        })}
-                        className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
-                        placeholder="clientId"
-                      />
-                      <input
-                        type="text"
-                        {...register("clientSecret", {
-                          required: { value: true, message: "El clientSecret es requerido" },
-                        })}
-                        className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
-                        placeholder="clientSecret"
-                      />
-                      <input
-                        type="text"
-                        {...register("refreshToken", {
-                          required: { value: true, message: "El refreshToken es requerido" },
-                        })}
-                        className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
-                        placeholder="refreshToken"
-                      />
-
-                    </div>
-                    <button
-                      type="submit"
-                      className="bg-stone-300 hover:bg-stone-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                    >
-                      Guardar
-                    </button>
-                  </form>
-                </div>
-              </div>
-
-            )
-          }
-
-
-          {/* Modal para modificar cliente */}
-          {
-            showModal && selectedClient && (
-              <div className="fixed top-0 left-0 w-full h-full flex justify-center items-center bg-black bg-opacity-50 z-50">
-                <div className="bg-white rounded p-8 w-96">
-                  <button
-                    className="float-right text-gray-600  cursor-pointer"
-                    onClick={handleCloseModal}
-                  >
-                    Cerrar
-                  </button>
-                  <h2 className="text-2xl font-bold mb-4">Modificar cliente</h2>
-                  <form>
-                    <div className="mb-4">
-                      <input
-                        type="text"
-                        value={selectedClient.nombre}
-                        onChange={(e) => handleInputChange(e, 'nombre')}
-                        className="input-field"
-                      />
-                      <input
-                        type="text"
-                        value={selectedClient.mail}
-                        onChange={(e) => handleInputChange(e, 'mail')}
-                        className="input-field"
-                      />
-                      <input
-                        type="text"
-                        value={selectedClient.clientId}
-                        onChange={(e) => handleInputChange(e, 'clientId')}
-                        className="input-field"
-                      />
-                      <input
-                        type="text"
-                        value={selectedClient.clientSecret}
-                        onChange={(e) => handleInputChange(e, 'clientSecret')}
-                        className="input-field"
-                      />
-                      <input
-                        type="text"
-                        value={selectedClient.refreshToken}
-                        onChange={(e) => handleInputChange(e, 'refreshToken')}
-                        className="input-field"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleSaveChanges}
-                      className="bg-stone-300 hover:bg-stone-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                    >
-                      Guardar cambios
-                    </button>
-                  </form>
-                </div>
-              </div>
-            )
-          }
         </div>
       </div>
-    </div>
 
-  );
+      {/* Modal para modificar cliente */}
+      {selectedClient ? (
+        showModal && (
+          <div className="fixed top-0 left-0 w-full h-full flex justify-center items-center bg-black bg-opacity-50 z-50">
+            <div className="bg-white rounded p-8 w-96">
+              <button
+                className="float-right text-gray-600 cursor-pointer"
+                onClick={() => setShowModal(false)}
+              >
+                Cerrar
+              </button>
+              <h2 className="text-2xl font-bold mb-4">Modificar cliente</h2>
+
+              <form>
+                <div className="mb-4">
+                  <input
+                    type="text"
+                    value={selectedClient.nombre}
+                    onChange={(e) => handleInputChange(e, 'nombre')}
+                    className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
+
+                  />
+                  <input
+                    type="text"
+                    value={selectedClient.mail}
+                    onChange={(e) => handleInputChange(e, 'mail')}
+                    className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
+
+                  />
+                  <input
+                    type="text"
+                    value={selectedClient.clientId}
+                    onChange={(e) => handleInputChange(e, 'clientId')}
+                    className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
+
+                  />
+                  <input
+                    type="text"
+                    value={selectedClient.clientSecret}
+                    onChange={(e) => handleInputChange(e, 'clientSecret')}
+                    className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
+
+                  />
+                  <input
+                    type="text"
+                    value={selectedClient.refreshToken}
+                    onChange={(e) => handleInputChange(e, 'refreshToken')}
+                    className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
+
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const result = updateClient(selectedClient);
+                    if ('error' in result) {
+                      const error = result.error;
+                      toast.error(`Error al modificar el cliente: ${error}`
+                      );
+                    } else {
+                      queryClient.invalidateQueries();
+                      setShowModal(false)
+                      toast.success('Cliente modificado exitosamente');
+                    }
+                  }}
+                  className="bg-stone-300 hover:bg-stone-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                >
+                  Guardar cambios
+                </button>
+              </form>
+            </div>
+          </div>
+        )
+      ) : (showModal && (
+        <div className="fixed top-0 left-0 w-full h-full flex justify-center items-center bg-black bg-opacity-50 z-50">
+          <div className="bg-white rounded p-8 w-96">
+            <button
+              className="float-right text-gray-600 cursor-pointer"
+              onClick={() => setShowModal(false)}
+            >
+              Cerrar
+            </button>
+            <h2 className="text-2xl font-bold mb-4">Agregar cliente</h2>
+            <form onSubmit={onSubmit}>
+              <div className="mb-4">
+                <input
+                  type="text"
+                  name="nombre"
+                  required
+                  className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
+                  placeholder="Nombre"
+                />
+                <input
+                  type="email"
+                  name="mail"
+                  required
+
+                  className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
+                  placeholder="email"
+                />
+                <input
+                  type="text"
+                  name="clientId"
+                  required
+                  className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
+                  placeholder="clientId"
+                />
+                <input
+                  type="text"
+                  name="clientSecret"
+                  required
+                  className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
+                  placeholder="clientSecret"
+                />
+                <input
+                  type="text"
+                  name="refreshToken"
+                  required
+                  className=" p-3 text-slate-600 rounded block mb-2  bg-slate-100 text-slate-300 w-full input-lg w-full "
+                  placeholder="refreshToken"
+                />
+              </div>
+              <button
+                type="submit"
+                className="bg-stone-300 hover:bg-stone-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+              >
+                Guardar
+              </button>
+            </form>
+          </div>
+        </div>)
+      )}
+    </div >
+
+  )
 };
 
 export default ClientPage;

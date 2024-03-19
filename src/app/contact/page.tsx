@@ -1,129 +1,82 @@
 'use client'
-import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form"
 
+import { useState } from "react";
+import { useForm } from "react-hook-form"
 import { useRouter } from "next/navigation";
-import Navbar from "@/components/Navbar";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchClients } from "../cliente/actions";
+import { sendNewMail } from "./actions";
+import { toast } from "react-toastify";
+import { Client, IEmail } from "@/types";
+import { useDebounce } from "@/Hooks/useDebounce";
 
 const Contact = () => {
     const { handleSubmit, register } = useForm();
-    const [clients, setClients] = useState([] as any);
-    const [selectedApiKey, setSelectedApiKey] = useState<string>("");
     const [selectedClientEmail, setSelectedClientEmail] = useState<string>("");
-    const [selectedNombre, setSelectedNombreCliente] = useState<string>("");
-    const [selectedClientId, setSelectedClientId] = useState<string>("");
-    const [selectedClientSecret, setSelectedClientSecret] = useState<string>("");
-    const [selectedRefreshToken, setSelectedRefreshToken] = useState<string>("");
+    const [selectedId, setSelectedId] = useState<string>("");
+    const [searchValue, setSearchValue] = useState('');
 
-    const [alerta, setAlert] = useState(false)
-
+    const debouncedSearchTerm = useDebounce(searchValue, 0);
     const router = useRouter();
+    const queryClient = useQueryClient();
+
+    const sendMailMutation = useMutation({
+        mutationFn: (data: IEmail) => sendNewMail(data),
+        onSuccess: () => {
+            toast.success('Email enviado correctamente');
+            queryClient.invalidateQueries();
+        }
+    });
+
+    const { isLoading, data: clientes, isError, error } = useQuery({
+        queryKey: ['clients', debouncedSearchTerm],
+        queryFn: () => fetchClients(debouncedSearchTerm)
+    });
+
+    if (!clientes) console.log('No existen clientes cargados ');
 
     const onSubmit = handleSubmit(async (data: any) => {
         try {
-            const res = await fetch('/api/contact', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    from: selectedClientEmail,
-                    clientId: selectedClientId,
-                    clientSecret: selectedClientSecret,
-                    refreshToken: selectedRefreshToken,
-                    to: data.to,
-                    cc: data.cc,
-                    text: data.mensaje,
-                    subject: data.asunto,
-                    apiKey: selectedApiKey ? selectedApiKey : data.cliente, // Si hay selectedApiKey, usa eso; de lo contrario, usa data.cliente
-                    nombre_cliente: selectedNombre ? selectedNombre : data.nombre
-                }),
-            });
-
-            if (res.ok) {
-                setAlert(true);
-
-                const logMessage = `Email enviado de: ${data.to}, cc: ${data.cc}, asunto:${data.subject}, mensaje: ${data.text}`;
-                const resLog = await fetch('/api/logs', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ texto: logMessage }),
-                });
-                if (resLog.ok) {
-                    console.log("registro guardado correctamente");
-                }
-                setTimeout(() => {
-                    setAlert(false);
-                    router.push('/contact'); // Esto quitará el mensaje de alerta después de 2 segundos
-                }, 1000);
-            } else {
-                const resJSON = await res.json();
-                throw new Error(resJSON.message);
+            const dataMail: IEmail = {
+                id: Number(selectedId),
+                to: data.to,
+                cc: data.cc,
+                text: data.mensaje,
+                subject: data.asunto,
             }
-        } catch (error) {
-            console.error('Error al enviar el mensaje:', error);
-            alert("Error al enviar el mensaje");
+            sendMailMutation.mutate(dataMail);
+        } catch (error: any) {
+            console.log(error);
         }
-
     });
 
-    const fetchClientsData = async () => {
-        try {
-            const response: any = await fetch('/api/client');
-            const clientJson = await response.json();
-            setClients(clientJson);
-        } catch (error) {
-            console.error('Error fetching clients:', error);
-        }
-    };
-
-    useEffect(() => {
-        fetchClientsData();
-    }, []);
-
     const handleClientSelect = (event: React.ChangeEvent<HTMLSelectElement>) => {
-        const selectedClient = clients.find((client: any) => client.nombre === event.target.value);
-        if (selectedClient) {
-            console.log('cliente elejido', selectedClient);
-            setSelectedNombreCliente(selectedClient.nombre)
-            setSelectedApiKey(selectedClient.apiKey);
-            setSelectedClientEmail(selectedClient.mail);
-            setSelectedClientId(selectedClient.clientId)
-            setSelectedClientSecret(selectedClient.clientSecret)
-            setSelectedRefreshToken(selectedClient.refreshToken)
+        if (Array.isArray(clientes)) {
+            const selectedClient = clientes.find(
+                (client: Client) => client.nombre === event.target.value
+            );
 
+            if (selectedClient) {
+                setSelectedId(selectedClient.id.toString());
+                setSelectedClientEmail(selectedClient.mail);
+            } else {
+                setSelectedClientEmail("");
+            }
         } else {
-            setSelectedApiKey(""); // Si no se encuentra la apiKey, se establece como vacía
-            setSelectedClientEmail("");
+
+            console.error("Error selecccionando el cliente.");
         }
     };
+
+    if (isLoading) return <div>...is Loading</div>;
+
+    else if (isError) return <div>Error. {error.message}</div>;
 
     return (
         <div>
-            <Navbar />
 
-            <div className="w-4/5 mx-auto h-screen ">
-                {alerta && (
-                    <div role="alert" className="alert alert-success">
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="stroke-current shrink-0 h-6 w-6"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                        </svg>
-                        <span>Mensaje enviado correctamente</span>
-                    </div>
-                )
-                }
+            <div className="main-content w-4/5 mx-auto h-screen ">
+
                 <h2 className="text-2xl ml-0 font-bold flex justify-between w-3/4">
                     <span className=" mt-8">Enviar mail </span>
                 </h2>
@@ -137,7 +90,6 @@ const Contact = () => {
 
                             <label htmlFor="cliente" className="text-slate-500 mb-2 block text-sm">
                                 Cliente</label>
-
                             <select
                                 {...register('cliente')}
                                 required
@@ -145,7 +97,7 @@ const Contact = () => {
                                 className="p-3 text-slate-600 rounded block mb-2 bg-slate-100 text-slate-300 w-full"
                             >
                                 <option value="">Selecciona un cliente</option>
-                                {clients && clients.map((cliente: any) => (
+                                {(clientes !== undefined) && clientes && Array.isArray(clientes) && clientes.map((cliente: any) => (
                                     <option key={cliente.id} value={cliente.nombre}>
                                         {cliente.nombre}
                                     </option>
@@ -153,11 +105,8 @@ const Contact = () => {
                             </select>
                         </div>
 
-
                         <div className="w-6/12 ml-2">
-
-                            <label htmlFor="from" className="text-slate-500 mb-2 block text-sm">
-                                De</label>
+                            <label htmlFor="from" className="text-slate-500 mb-2 block text-sm"> De </label>
                             <input
                                 type="text"
                                 {...register("from")}
@@ -173,10 +122,8 @@ const Contact = () => {
 
                     <div className="flex justify-between">
                         <div className="w-6/12 mr-2">
-
-                            <label htmlFor="to" className="text-slate-500 mb-2 block text-sm">
-                                Email (separados por comas) </label>
-                            <input type="text"
+                            <label htmlFor="to" className="text-slate-500 mb-2 block text-sm"> Email (separados por comas) </label>
+                            <input type="mail"
                                 {...register("to")}
                                 required
                                 className="p-3 text-slate-600 rounded block mb-2 bg-slate-100 text-slate-300 w-full"

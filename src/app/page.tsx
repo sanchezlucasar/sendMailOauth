@@ -1,14 +1,12 @@
-import Navbar from "@/components/Navbar"
+import RootLayout from "./layout"
 
 function HomePage() {
   return (
-
-    <div className='main-content'>
-      <Navbar />
+    <RootLayout>
       <div className="h-screen">
+        {/* Contenido de tu página de inicio */}
       </div>
-    </div>
-
+    </RootLayout>
   )
 }
 

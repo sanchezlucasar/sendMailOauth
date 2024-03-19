@@ -7,23 +7,14 @@ body {
 }
 
 /* Estilos para el footer */
-.footer {
-    position: fixed;
-    bottom: 0;
-    width: 100%;
-    background-color: #333;
-    color: white;
-    text-align: center;
-    margin: 0 0 0;
-    padding: 20px 0;
-}
+
 
 /* Estilos para el contenido principal */
 .main-content {
-    margin-bottom: 50px;
+    padding-top: 100px;
+
     /* Espaciado para el footer */
-    min-height: calc(100vh - 100px);
-    /* Altura mínima menos el footer */
+
 }
 
 .table-container {
